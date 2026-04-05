@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { AuthTokens } from "./types.js";
 import { REQUIRED_COOKIES, BASE_URL } from "./constants.js";
@@ -43,8 +43,8 @@ export function extractSessionIdFromPage(html: string): string | null {
 }
 
 export function saveTokens(tokens: AuthTokens): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(AUTH_FILE, JSON.stringify(tokens, null, 2), "utf-8");
+  mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  writeFileSync(AUTH_FILE, JSON.stringify(tokens, null, 2), { encoding: "utf-8", mode: 0o600 });
 }
 
 export function loadTokensFromCache(): AuthTokens | null {
@@ -100,7 +100,7 @@ export function loadTokens(): AuthTokens {
   );
 }
 
-function parseCookieString(raw: string): Record<string, string> {
+export function parseCookieString(raw: string): Record<string, string> {
   const cookies: Record<string, string> = {};
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
@@ -168,11 +168,11 @@ function openInBrowser(url: string): void {
   const platform = process.platform;
   try {
     if (platform === "linux") {
-      execSync(`xdg-open "${url}"`, { stdio: "ignore" });
+      execFile("xdg-open", [url], { stdio: "ignore" }, () => {});
     } else if (platform === "darwin") {
-      execSync(`open "${url}"`, { stdio: "ignore" });
+      execFile("open", [url], { stdio: "ignore" }, () => {});
     } else if (platform === "win32") {
-      execSync(`start "" "${url}"`, { stdio: "ignore" });
+      execFile("cmd", ["/c", "start", "", url], { stdio: "ignore" }, () => {});
     }
   } catch {
     console.log(`Could not open browser automatically. Open this URL manually:\n${url}`);

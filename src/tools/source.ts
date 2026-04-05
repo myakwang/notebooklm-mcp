@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { McpTool, pendingConfirmation } from "./index.js";
-import * as fs from "fs";
+import { promises as fs } from "node:fs";
+import { resolve } from "node:path";
 
 export const sourceTools: McpTool<any>[] = [
   {
@@ -51,7 +52,8 @@ export const sourceTools: McpTool<any>[] = [
     execute: async (client, { notebook_id, content, file_path, title }) => {
       let documentContent = content;
       if (!documentContent && file_path) {
-        documentContent = fs.readFileSync(file_path, "utf8");
+        const resolved = resolve(file_path);
+        documentContent = await fs.readFile(resolved, "utf8");
       }
       if (!documentContent) {
         throw new Error("Must provide either content or file_path");
