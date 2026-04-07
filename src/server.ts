@@ -10,6 +10,7 @@ import { researchTools } from "./tools/research.js";
 import { notebookTools } from "./tools/notebook.js";
 import { sourceTools } from "./tools/source.js";
 import { studioTools } from "./tools/studio.js";
+import { gdocsTools } from "./tools/gdocs.js";
 let client: NotebookLMClient | null = null;
 
 function getClient(queryTimeout?: number): NotebookLMClient {
@@ -39,6 +40,7 @@ export function createServer(queryTimeout?: number): McpServer {
     ...authTools,
     ...queryTools,
     ...researchTools,
+    ...gdocsTools,
   ], getClient, { 
     queryTimeout,
     onClientReset: () => { client = null; }
