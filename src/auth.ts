@@ -89,9 +89,14 @@ export function loadTokensFromEnv(): AuthTokens | null {
 
 export function loadTokens(): AuthTokens {
   const fromEnv = loadTokensFromEnv();
-  if (fromEnv) return fromEnv;
-
   const fromCache = loadTokensFromCache();
+
+  // Prefer whichever source has more recent tokens
+  if (fromEnv && fromCache) {
+    return fromCache.extracted_at > fromEnv.extracted_at ? fromCache : fromEnv;
+  }
+
+  if (fromEnv) return fromEnv;
   if (fromCache) return fromCache;
 
   throw new Error(
