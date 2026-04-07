@@ -15,7 +15,8 @@
     "prepublishOnly": "npm run build",
     "auth": "node dist/cli.js auth",
     "serve": "node dist/cli.js serve",
-    "test": "vitest run"
+    "test": "vitest run",
+    "serve:remote": "node dist/cli.js serve-remote"
   },
   "engines": {
     "node": ">=18"
@@ -45,11 +46,15 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.26.0",
     "commander": "12.1.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "ws": "8.18.2",
     "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/node": "20.19.33",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.2",
     "@types/ws": "8.5.14",
     "msw": "^2.12.10",
     "tsup": "8.5.1",

@@ -229,6 +229,24 @@ export async function runAuthFlow(): Promise<AuthTokens> {
   return tokens;
 }
 
+export function updateTokensFromJson(json: {
+  cookies: Record<string, string>;
+  csrf_token?: string;
+  session_id?: string;
+}): AuthTokens {
+  if (!validateCookies(json.cookies)) {
+    throw new Error(`Missing required cookies: ${REQUIRED_COOKIES.join(", ")}`);
+  }
+  const tokens: AuthTokens = {
+    cookies: json.cookies,
+    csrf_token: json.csrf_token || "",
+    session_id: json.session_id || "",
+    extracted_at: Date.now() / 1000,
+  };
+  saveTokens(tokens);
+  return tokens;
+}
+
 export function showTokens(): void {
   const tokens = loadTokensFromCache();
   if (!tokens) {

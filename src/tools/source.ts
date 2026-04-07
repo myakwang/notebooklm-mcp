@@ -107,6 +107,54 @@ export const sourceTools: McpTool<any>[] = [
     },
   },
   {
+    name: "sync_conversation",
+    description:
+      "Sync a conversation transcript to a NotebookLM notebook as a formatted text source",
+    schema: {
+      notebook_id: z.string().describe("The notebook ID"),
+      title: z.string().describe("Title for the conversation source"),
+      messages: z
+        .array(
+          z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+          }),
+        )
+        .describe("Conversation messages in order"),
+      source_client: z
+        .string()
+        .optional()
+        .describe("Source CLI (e.g. 'claude-cli', 'gemini-cli')"),
+    },
+    execute: async (
+      client,
+      { notebook_id, title, messages, source_client },
+    ) => {
+      const header = [
+        `# ${title}`,
+        `Date: ${new Date().toISOString()}`,
+        source_client ? `Source: ${source_client}` : null,
+        `Messages: ${messages.length}`,
+        "",
+        "---",
+        "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const body = messages
+        .map((m: { role: string; content: string }, i: number) => {
+          const speaker = m.role === "user" ? "User" : "Assistant";
+          return `### ${speaker} (${i + 1})\n\n${m.content}`;
+        })
+        .join("\n\n---\n\n");
+
+      const content = header + body;
+      await client.addTextSource(notebook_id, content, title);
+      return { message: "Conversation synced", message_count: messages.length };
+    },
+  },
+  {
     name: "source_delete",
     description: "Delete a source from a notebook (requires confirm=true)",
     schema: {

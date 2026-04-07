@@ -20,6 +20,10 @@ function getClient(queryTimeout?: number): NotebookLMClient {
   return client;
 }
 
+export function resetClient(): void {
+  client = null;
+}
+
 export function createServer(queryTimeout?: number): McpServer {
   const server = new McpServer({
     name: "notebooklm",
