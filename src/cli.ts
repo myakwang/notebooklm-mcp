@@ -59,6 +59,7 @@ program
   .option("--manual", "Use manual cookie copy-paste instead")
   .option("--file <path>", "Import cookies from a file instead")
   .option("--show-tokens", "Show cached token info (no secrets)")
+  .option("--remote <url>", "After auth, push tokens to remote server (e.g. https://host/auth/update?secret-key=KEY)")
   .action(async (opts) => {
     if (opts.showTokens) {
       showTokens();
@@ -70,17 +71,36 @@ program
       return;
     }
 
+    let tokens;
     if (opts.manual) {
-      await runAuthFlow();
-      return;
+      tokens = await runAuthFlow();
+    } else {
+      try {
+        tokens = await runBrowserAuthFlow();
+      } catch (error) {
+        console.error(`\n⚠️ Smart Authentication failed: ${(error as Error).message}`);
+        console.error("Falling back to manual authentication flow...\n");
+        tokens = await runAuthFlow();
+      }
     }
 
-    try {
-      await runBrowserAuthFlow();
-    } catch (error) {
-      console.error(`\n⚠️ Smart Authentication failed: ${(error as Error).message}`);
-      console.error("Falling back to manual authentication flow...\n");
-      await runAuthFlow();
+    if (opts.remote && tokens) {
+      console.log(`\nPushing tokens to remote server...`);
+      try {
+        const res = await fetch(opts.remote, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(tokens),
+        });
+        const data = await res.json() as Record<string, unknown>;
+        if (res.ok) {
+          console.log(`✅ Remote server updated (${data.cookie_count} cookies)`);
+        } else {
+          console.error(`❌ Remote update failed: ${data.error}`);
+        }
+      } catch (e) {
+        console.error(`❌ Could not reach remote server: ${(e as Error).message}`);
+      }
     }
   });
 
