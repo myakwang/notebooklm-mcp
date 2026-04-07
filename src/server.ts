@@ -1,50 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import { NotebookLMClient } from "./client.js";
-import { loadTokens, saveTokens } from "./auth.js";
-import type { AuthTokens, ToolResult } from "./types.js";
 import { registerTools } from "./tools/index.js";
-import { authTools } from "./tools/auth.js";
-import { queryTools } from "./tools/query.js";
-import { researchTools } from "./tools/research.js";
-import { notebookTools } from "./tools/notebook.js";
-import { sourceTools } from "./tools/source.js";
-import { studioTools } from "./tools/studio.js";
 import { gdocsTools } from "./tools/gdocs.js";
-let client: NotebookLMClient | null = null;
 
-function getClient(queryTimeout?: number): NotebookLMClient {
-  if (!client) {
-    const tokens = loadTokens();
-    client = new NotebookLMClient(tokens, queryTimeout);
-  }
-  return client;
-}
-
-export function resetClient(): void {
-  client = null;
-}
-
-export function createServer(queryTimeout?: number): McpServer {
+export function createServer(): McpServer {
   const server = new McpServer({
     name: "notebooklm",
-    version: "0.1.0",
+    version: "0.2.0",
   });
 
-  // ─── Refactored Tool Registration ─────────────────────
-  
-  registerTools(server, [
-    ...notebookTools,
-    ...sourceTools,
-    ...studioTools,
-    ...authTools,
-    ...queryTools,
-    ...researchTools,
-    ...gdocsTools,
-  ], getClient, { 
-    queryTimeout,
-    onClientReset: () => { client = null; }
-  });
+  registerTools(server, [...gdocsTools], () => null as any, {});
 
   return server;
 }

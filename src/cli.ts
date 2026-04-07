@@ -1,24 +1,19 @@
 import { Command } from "commander";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
-import { runAuthFlow, runFileImport, showTokens } from "./auth.js";
-import { runBrowserAuthFlow } from "./browser-auth.js";
 
 const program = new Command();
 
 program
   .name("notebooklm-mcp")
-  .description("MCP server for Google NotebookLM")
-  .version("0.1.30");
+  .description("MCP server for syncing conversations to Google Docs → NotebookLM")
+  .version("0.2.0");
 
 program
   .command("serve")
   .description("Start the MCP server (stdio transport)")
-  .option("--debug", "Enable debug logging")
-  .option("--query-timeout <ms>", "Query timeout in milliseconds", "120000")
-  .action(async (opts) => {
-    const queryTimeout = parseInt(opts.queryTimeout, 10);
-    const server = createServer(queryTimeout);
+  .action(async () => {
+    const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+    const server = createServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
   });
@@ -28,11 +23,9 @@ program
   .description("Start the MCP server with HTTP/SSE transport for remote access")
   .option("--port <port>", "HTTP port to listen on", "3000")
   .option("--api-key <key>", "API key for authentication (or set MCP_API_KEY env var)")
-  .option("--query-timeout <ms>", "Query timeout in milliseconds", "120000")
   .action(async (opts) => {
     const port = parseInt(process.env.PORT || opts.port, 10);
     const apiKey = opts.apiKey || process.env.MCP_API_KEY;
-    const queryTimeout = parseInt(opts.queryTimeout, 10);
 
     if (!apiKey) {
       console.warn("WARNING: No API key set. Server is publicly accessible. Set --api-key or MCP_API_KEY.");
@@ -40,68 +33,16 @@ program
 
     const { createHttpServer } = await import("./http-server.js");
     const httpServer = createHttpServer(
-      () => createServer(queryTimeout),
+      () => createServer(),
       { port, apiKey },
     );
 
     httpServer.listen(port, () => {
       console.log(`NotebookLM MCP server listening on port ${port}`);
-      console.log(`Transport: SSE`);
-      console.log(`SSE endpoint: http://0.0.0.0:${port}/sse`);
+      console.log(`Transport: Streamable HTTP + SSE`);
+      console.log(`Endpoint: http://0.0.0.0:${port}/mcp`);
       console.log(`Health: http://0.0.0.0:${port}/health`);
-      console.log(`Auth update: POST http://0.0.0.0:${port}/auth/update`);
     });
-  });
-
-program
-  .command("auth")
-  .description("Authenticate with NotebookLM (automated Chrome integration)")
-  .option("--manual", "Use manual cookie copy-paste instead")
-  .option("--file <path>", "Import cookies from a file instead")
-  .option("--show-tokens", "Show cached token info (no secrets)")
-  .option("--remote <url>", "After auth, push tokens to remote server (e.g. https://host/auth/update?secret-key=KEY)")
-  .action(async (opts) => {
-    if (opts.showTokens) {
-      showTokens();
-      return;
-    }
-
-    if (opts.file) {
-      await runFileImport(opts.file);
-      return;
-    }
-
-    let tokens;
-    if (opts.manual) {
-      tokens = await runAuthFlow();
-    } else {
-      try {
-        tokens = await runBrowserAuthFlow();
-      } catch (error) {
-        console.error(`\n⚠️ Smart Authentication failed: ${(error as Error).message}`);
-        console.error("Falling back to manual authentication flow...\n");
-        tokens = await runAuthFlow();
-      }
-    }
-
-    if (opts.remote && tokens) {
-      console.log(`\nPushing tokens to remote server...`);
-      try {
-        const res = await fetch(opts.remote, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(tokens),
-        });
-        const data = await res.json() as Record<string, unknown>;
-        if (res.ok) {
-          console.log(`✅ Remote server updated (${data.cookie_count} cookies)`);
-        } else {
-          console.error(`❌ Remote update failed: ${data.error}`);
-        }
-      } catch (e) {
-        console.error(`❌ Could not reach remote server: ${(e as Error).message}`);
-      }
-    }
   });
 
 // Default command: serve (for npx compatibility)
