@@ -25,13 +25,13 @@ export function createHttpServer(
     app.use((req, res, next) => {
       if (req.path === "/health") return next();
 
+      // Support both: Authorization header and ?secret-key= query param
       const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        res.status(401).json({ error: "Missing or invalid Authorization header" });
-        return;
-      }
-      if (authHeader.slice(7) !== options.apiKey) {
-        res.status(403).json({ error: "Invalid API key" });
+      const queryKey = req.query["secret-key"] as string | undefined;
+      const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : queryKey;
+
+      if (!token || token !== options.apiKey) {
+        res.status(401).json({ error: "Invalid or missing API key" });
         return;
       }
       next();
