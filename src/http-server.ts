@@ -2,6 +2,7 @@ import http from "node:http";
 import express from "express";
 import cors from "cors";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadTokensFromCache, updateTokensFromJson } from "./auth.js";
 import { resetClient } from "./server.js";
@@ -37,16 +38,22 @@ export function createHttpServer(
     });
   }
 
-  // Session tracking for SSE connections
-  const sessions = new Map<string, { server: McpServer; transport: SSEServerTransport }>();
+  // ─── Session tracking ──────────────────────────────────
 
-  // Health check
+  // SSE sessions
+  const sseSessions = new Map<string, { server: McpServer; transport: SSEServerTransport }>();
+
+  // Streamable HTTP sessions
+  const httpSessions = new Map<string, { server: McpServer; transport: StreamableHTTPServerTransport }>();
+
+  // ─── Health check ──────────────────────────────────────
+
   app.get("/health", (_req, res) => {
     const result: Record<string, unknown> = {
       status: "ok",
       version: "0.1.30",
-      transport: "sse",
-      active_sessions: sessions.size,
+      transport: "sse+streamable-http",
+      active_sessions: sseSessions.size + httpSessions.size,
     };
 
     if (_req.query.deep === "true") {
@@ -62,26 +69,75 @@ export function createHttpServer(
     res.json(result);
   });
 
-  // SSE endpoint — one server+transport per connection
+  // ─── Streamable HTTP transport (POST /mcp) ─────────────
+
+  app.post("/mcp", async (req, res) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+    if (sessionId && httpSessions.has(sessionId)) {
+      // Existing session
+      const session = httpSessions.get(sessionId)!;
+      await session.transport.handleRequest(req, res);
+    } else {
+      // New session
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+        onsessioninitialized: (id) => {
+          httpSessions.set(id, { server, transport });
+        },
+      });
+      const server = serverFactory();
+
+      transport.onclose = () => {
+        const id = [...httpSessions.entries()].find(([, v]) => v.transport === transport)?.[0];
+        if (id) httpSessions.delete(id);
+      };
+
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+    }
+  });
+
+  app.get("/mcp", async (req, res) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !httpSessions.has(sessionId)) {
+      res.status(400).json({ error: "Invalid or missing session ID" });
+      return;
+    }
+    const session = httpSessions.get(sessionId)!;
+    await session.transport.handleRequest(req, res);
+  });
+
+  app.delete("/mcp", async (req, res) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    if (!sessionId || !httpSessions.has(sessionId)) {
+      res.status(400).json({ error: "Invalid or missing session ID" });
+      return;
+    }
+    const session = httpSessions.get(sessionId)!;
+    await session.transport.handleRequest(req, res);
+    httpSessions.delete(sessionId);
+  });
+
+  // ─── SSE transport (GET /sse, POST /messages) ─────────
+
   app.get("/sse", async (req, res) => {
     const server = serverFactory();
     const transport = new SSEServerTransport("/messages", res);
     const sessionId = transport.sessionId;
 
-    sessions.set(sessionId, { server, transport });
+    sseSessions.set(sessionId, { server, transport });
 
-    // Clean up on disconnect
     req.on("close", () => {
-      sessions.delete(sessionId);
+      sseSessions.delete(sessionId);
     });
 
     await server.connect(transport);
   });
 
-  // Message endpoint for SSE clients
   app.post("/messages", async (req, res) => {
     const sessionId = req.query.sessionId as string;
-    const session = sessions.get(sessionId);
+    const session = sseSessions.get(sessionId);
     if (!session) {
       res.status(404).json({ error: "Session not found" });
       return;
@@ -89,7 +145,8 @@ export function createHttpServer(
     await session.transport.handlePostMessage(req, res);
   });
 
-  // Auth hot-reload endpoint
+  // ─── Auth hot-reload ──────────────────────────────────
+
   app.post("/auth/update", (req, res) => {
     try {
       const body = req.body;
