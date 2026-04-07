@@ -1,8 +1,5 @@
-src/
-docs/
 node_modules/
+dist/
 .git/
 .planning/
-*.md
-tsconfig.json
-tsup.config.ts
+docs/
