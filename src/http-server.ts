@@ -1,4 +1,5 @@
 import http from "node:http";
+import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
@@ -18,11 +19,7 @@ export function createHttpServer(
 ): http.Server {
   const app = express();
   app.use(cors());
-  // Skip JSON parsing for /mcp — StreamableHTTPServerTransport parses its own body
-  app.use((req, res, next) => {
-    if (req.path === "/mcp") return next();
-    express.json({ limit: "10mb" })(req, res, next);
-  });
+  app.use(express.json({ limit: "10mb" }));
 
   // API key auth middleware (skip for /health)
   if (options.apiKey) {
@@ -73,33 +70,47 @@ export function createHttpServer(
     res.json(result);
   });
 
-  // ─── Streamable HTTP transport (POST /mcp) ─────────────
+  // ─── Streamable HTTP transport (/mcp) ──────────────────
 
   app.post("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
     if (sessionId && httpSessions.has(sessionId)) {
-      // Existing session
       const session = httpSessions.get(sessionId)!;
-      await session.transport.handleRequest(req, res);
-    } else {
-      // New session
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        onsessioninitialized: (id) => {
-          httpSessions.set(id, { server, transport });
-        },
-      });
-      const server = serverFactory();
-
-      transport.onclose = () => {
-        const id = [...httpSessions.entries()].find(([, v]) => v.transport === transport)?.[0];
-        if (id) httpSessions.delete(id);
-      };
-
-      await server.connect(transport);
-      await transport.handleRequest(req, res);
+      await session.transport.handleRequest(req, res, req.body);
+      return;
     }
+
+    if (sessionId) {
+      // Stale session — tell client to reconnect
+      res.status(404).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Session not found. Please reconnect." },
+        id: null,
+      });
+      return;
+    }
+
+    // New session (no session ID = initialize request)
+    const server = serverFactory();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+      onsessioninitialized: (id) => {
+        httpSessions.set(id, { server, transport });
+      },
+    });
+
+    transport.onclose = () => {
+      for (const [id, entry] of httpSessions.entries()) {
+        if (entry.transport === transport) {
+          httpSessions.delete(id);
+          break;
+        }
+      }
+    };
+
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
   });
 
   app.get("/mcp", async (req, res) => {
