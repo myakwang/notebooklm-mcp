@@ -19,10 +19,11 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist/ dist/
 
 ENV NODE_ENV=production
-EXPOSE 3000
+EXPOSE 8080
 
 # Required env vars (set at deploy time):
+# PORT - assigned by platform (Zeabur, Railway, etc.)
 # NOTEBOOKLM_COOKIES - Google NotebookLM cookies
 # MCP_API_KEY - API key for MCP endpoint auth
 
-CMD ["node", "dist/cli.js", "serve-remote", "--port", "3000"]
+CMD ["node", "dist/cli.js", "serve-remote"]

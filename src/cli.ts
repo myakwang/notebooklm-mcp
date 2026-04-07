@@ -30,7 +30,7 @@ program
   .option("--api-key <key>", "API key for authentication (or set MCP_API_KEY env var)")
   .option("--query-timeout <ms>", "Query timeout in milliseconds", "120000")
   .action(async (opts) => {
-    const port = parseInt(opts.port, 10);
+    const port = parseInt(process.env.PORT || opts.port, 10);
     const apiKey = opts.apiKey || process.env.MCP_API_KEY;
     const queryTimeout = parseInt(opts.queryTimeout, 10);
 
